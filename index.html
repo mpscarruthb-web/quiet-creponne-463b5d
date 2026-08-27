@@ -87,7 +87,7 @@
                     <i class="ph-bold ph-chart-bar text-base"></i>
                     <span class="hidden sm:inline">LRPC Live Dashboard</span>
                     <span class="sm:hidden">Results</span>
-                    <span id="live-indicator-badge" class="ml-1 px-1.5 py-0.5 text-[10px] bg-red-600 text-white font-bold rounded-full animate-pulse hidden">LIVE</span>
+                    <span id="live-indicator-badge" class="ml-1 px-1.5 py-0.5 text-[10px] bg-red-600 text-white font-bold rounded-full animate-pulse">LIVE</span>
                 </button>
                 <button onclick="showQRCodeModal()" class="flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-700 ml-1">
                     <i class="ph-bold ph-qr-code text-base text-mustang-red"></i>
@@ -137,7 +137,7 @@
             <!-- 10 Projects Grid -->
             <form id="bond-form" onsubmit="handleFormSubmit(event)" class="space-y-4 sm:space-y-6">
                 <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                    <!-- Project Cards standard JS injection target -->
+                    <!-- Project Cards injected via JavaScript -->
                 </div>
 
                 <!-- Sticky Floating Footer Bar -->
@@ -276,23 +276,11 @@
             <p class="text-slate-600 text-sm">
                 Project this screen during your meeting. Attendees can scan the code with their mobile phone cameras to open the voting form directly.
             </p>
-
-            <!-- Custom URL Input & Copy Row -->
-            <div class="text-left space-y-1">
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Form / App Web URL
-                </label>
-                <div class="flex items-center space-x-2">
-                    <input type="url" id="custom-qr-url" oninput="updateQRCodeFromInput()" placeholder="https://your-published-site.com" class="flex-1 px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-mustang-red outline-none">
-                    <button onclick="copyFormLink()" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center space-x-1 transition shrink-0">
-                        <i class="ph-bold ph-copy"></i>
-                        <span>Copy</span>
-                    </button>
-                </div>
-            </div>
-
             <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 inline-block mx-auto shadow-inner">
                 <img id="qr-code-img" src="" alt="Meeting Voting Form QR Code" class="w-56 h-56 mx-auto rounded-lg">
+            </div>
+            <div class="text-xs text-slate-400 break-all font-mono bg-slate-100 p-2.5 rounded-xl border border-slate-200" id="qr-url-text">
+                ...
             </div>
             <button onclick="closeQRCodeModal()" class="w-full py-3 bg-slate-900 hover:bg-black text-white font-bold rounded-xl transition">
                 Close Screen
@@ -306,11 +294,11 @@
         <span id="toast-msg">Notification message</span>
     </div>
 
-    <!-- Firebase Script and Application Engine -->
+    <!-- Firebase SDK & Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         // Projects Definition
         const PROJECTS = [
@@ -330,43 +318,40 @@
         let db = null;
         let auth = null;
         let currentUser = null;
-        let allResponses = []; // Local mirror of submissions
+        let allResponses = [];
 
-        // App Initialization
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mps-bond-2027';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // Exact Firebase Config Credentials
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXYs3NYjzazYp7o0PF722DnF9tSvM0M_I",
+            authDomain: "mps-bond-voting.firebaseapp.com",
+            projectId: "mps-bond-voting",
+            storageBucket: "mps-bond-voting.firebasestorage.app",
+            messagingSenderId: "591807456200",
+            appId: "1:591807456200:web:a407a03296d76da6a196fd",
+            databaseURL: "https://mps-bond-voting-default-rtdb.firebaseio.com"
+        };
 
-        // Initialize Firebase if config exists, otherwise use in-memory state
+        // Initialize Firebase Realtime Database
         async function initBackend() {
-            if (firebaseConfig) {
-                try {
-                    const app = initializeApp(firebaseConfig);
-                    auth = getAuth(app);
-                    db = getFirestore(app);
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getDatabase(app);
 
-                    if (initialToken) {
-                        await signInWithCustomToken(auth, initialToken);
-                    } else {
-                        await signInAnonymously(auth);
+                await signInAnonymously(auth);
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) {
+                        subscribeToData();
                     }
-
-                    onAuthStateChanged(auth, (user) => {
-                        currentUser = user;
-                        if (user) {
-                            subscribeToData();
-                        }
-                    });
-                } catch (err) {
-                    console.warn("Firebase fallback mode activated:", err);
-                    setupLocalFallback();
-                }
-            } else {
+                });
+            } catch (err) {
+                console.warn("Firebase offline or error, running locally:", err);
                 setupLocalFallback();
             }
         }
 
-        // Setup local storage fallback when cloud config isn't provided
         function setupLocalFallback() {
             const stored = localStorage.getItem('mps_bond_votes');
             if (stored) {
@@ -374,39 +359,37 @@
                     allResponses = JSON.parse(stored);
                 } catch(e) { allResponses = []; }
             } else {
-                allResponses = getInitialSampleData();
-                localStorage.setItem('mps_bond_votes', JSON.stringify(allResponses));
+                allResponses = [];
             }
             updateDashboardUI();
         }
 
-        // Subscribe to Firestore for real-time updates
+        // Subscribe to Realtime Database for instant multi-device sync
         function subscribeToData() {
-            if (!db || !currentUser) return;
-            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'responses');
+            if (!db) return;
+            const votesRef = ref(db, 'votes');
             
-            onSnapshot(colRef, (snapshot) => {
+            onValue(votesRef, (snapshot) => {
                 allResponses = [];
-                snapshot.forEach(docSnap => {
-                    allResponses.push({ id: docSnap.id, ...docSnap.data() });
-                });
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        allResponses.push({ id: key, ...data[key] });
+                    });
+                }
                 updateDashboardUI();
             }, (error) => {
-                console.error("Firestore error:", error);
+                console.error("Database sync error:", error);
             });
         }
 
-        // Render Form & Dashboard HTML structures on load
         window.onload = function() {
-            // Set Today's Date in ISO
             document.getElementById('voter-date').value = new Date().toISOString().split('T')[0];
-            
             renderVotingForm();
             renderDashboardGrid();
             initBackend();
         };
 
-        // Render Voting Form Cards
         function renderVotingForm() {
             const container = document.getElementById('projects-container');
             container.innerHTML = PROJECTS.map(project => `
@@ -417,7 +400,6 @@
                         </h3>
                     </div>
 
-                    <!-- Choice Buttons -->
                     <div class="grid grid-cols-2 gap-3">
                         <label class="cursor-pointer">
                             <input type="radio" name="proj_${project.id}_vote" value="Yes" onchange="updateVoteCounter()" class="peer sr-only">
@@ -435,7 +417,6 @@
                         </label>
                     </div>
 
-                    <!-- Comments Text Input -->
                     <div>
                         <input type="text" name="proj_${project.id}_comment" placeholder="Add optional feedback for ${project.name}..." class="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mustang-red text-xs sm:text-sm outline-none transition placeholder:text-slate-400">
                     </div>
@@ -443,35 +424,28 @@
             `).join('');
         }
 
-        // Render Dashboard Grid Cards Shell
         function renderDashboardGrid() {
             const grid = document.getElementById('dashboard-grid');
             grid.innerHTML = PROJECTS.map(project => `
                 <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col h-[420px]">
-                    <!-- Card Title -->
                     <div class="pb-3 border-b border-slate-100 min-h-[50px] flex items-center">
                         <h4 class="font-display font-extrabold text-xs sm:text-sm text-slate-900 leading-tight">
                             <span class="text-mustang-red font-black">${project.id}.</span> ${project.name}
                         </h4>
                     </div>
 
-                    <!-- Visual Bar Graph Area -->
                     <div class="py-4 flex-1 flex flex-col justify-end space-y-2">
-                        <!-- Percentage Labels -->
                         <div class="flex justify-between items-baseline text-xs font-black px-1">
                             <div class="text-mustang-red"><span id="dash-${project.id}-yes-pct">0%</span> Yes</div>
                             <div class="text-slate-600"><span id="dash-${project.id}-info-pct">0%</span> Need Info</div>
                         </div>
 
-                        <!-- Side-by-Side Vertical Bars Container -->
                         <div class="h-32 bg-slate-50 rounded-xl p-2 flex items-end justify-around space-x-3 border border-slate-100">
-                            <!-- Yes Bar -->
                             <div class="w-1/2 flex flex-col items-center h-full justify-end">
                                 <span id="dash-${project.id}-yes-count" class="text-[10px] font-bold text-slate-500 mb-1">0</span>
                                 <div id="dash-${project.id}-yes-bar" class="w-full bg-mustang-red rounded-t-lg transition-all duration-500 min-h-[4px]" style="height: 0%"></div>
                                 <span class="text-[9px] font-bold uppercase text-slate-400 mt-1">YES</span>
                             </div>
-                            <!-- Need Info Bar -->
                             <div class="w-1/2 flex flex-col items-center h-full justify-end">
                                 <span id="dash-${project.id}-info-count" class="text-[10px] font-bold text-slate-500 mb-1">0</span>
                                 <div id="dash-${project.id}-info-bar" class="w-full bg-slate-700 rounded-t-lg transition-all duration-500 min-h-[4px]" style="height: 0%"></div>
@@ -480,7 +454,6 @@
                         </div>
                     </div>
 
-                    <!-- Live Comment Feed Box -->
                     <div class="pt-3 border-t border-slate-100 flex-1 flex flex-col overflow-hidden">
                         <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
                             <span>Comments Feed</span>
@@ -494,7 +467,6 @@
             `).join('');
         }
 
-        // Live Vote Counter in Form
         window.updateVoteCounter = function() {
             let count = 0;
             PROJECTS.forEach(p => {
@@ -504,7 +476,6 @@
             document.getElementById('voted-count-badge').textContent = `${count} / 10`;
         };
 
-        // Form Submission Logic
         window.handleFormSubmit = async function(e) {
             e.preventDefault();
             
@@ -543,9 +514,9 @@
             submitBtn.classList.add('opacity-75');
 
             try {
-                if (db && currentUser) {
-                    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'responses');
-                    await addDoc(colRef, payload);
+                if (db) {
+                    const votesRef = ref(db, 'votes');
+                    await push(votesRef, payload);
                 } else {
                     allResponses.push(payload);
                     localStorage.setItem('mps_bond_votes', JSON.stringify(allResponses));
@@ -562,7 +533,6 @@
             }
         };
 
-        // Update Dashboard Data and Charts
         function updateDashboardUI() {
             const totalVoters = allResponses.length;
             document.getElementById('metric-total-voters').textContent = totalVoters.toLocaleString();
@@ -598,7 +568,6 @@
                 totalYesAllProjects += yesCount;
                 totalVotesAllProjects += totalValid;
 
-                // Update UI elements for card
                 document.getElementById(`dash-${p.id}-yes-pct`).textContent = `${yesPct}%`;
                 document.getElementById(`dash-${p.id}-info-pct`).textContent = `${infoPct}%`;
                 
@@ -608,7 +577,6 @@
                 document.getElementById(`dash-${p.id}-yes-bar`).style.height = `${yesPct}%`;
                 document.getElementById(`dash-${p.id}-info-bar`).style.height = `${infoPct}%`;
 
-                // Update comments
                 const commentListElem = document.getElementById(`dash-${p.id}-comments-list`);
                 document.getElementById(`dash-${p.id}-comment-count`).textContent = `(${projectComments.length})`;
 
@@ -624,7 +592,6 @@
                 }
             });
 
-            // Update Header Metrics
             const overallRate = totalVotesAllProjects > 0 ? Math.round((totalYesAllProjects / totalVotesAllProjects) * 100) : 0;
             document.getElementById('metric-overall-support').textContent = `${overallRate}%`;
 
@@ -643,7 +610,6 @@
                 : 'N/A';
         }
 
-        // Navigation Tabs Toggle
         window.switchTab = function(tab) {
             const formView = document.getElementById('view-form');
             const dashView = document.getElementById('view-dashboard');
@@ -664,36 +630,19 @@
             }
         };
 
-        // Modal Handlers
         window.closeSuccessModal = function() {
             document.getElementById('modal-success').classList.add('hidden');
         };
 
         window.showQRCodeModal = function() {
-            const urlInput = document.getElementById('custom-qr-url');
-            if (!urlInput.value) {
-                // Default to current URL or placeholder instructions if in preview
-                const currentUrl = window.location.href;
-                urlInput.value = currentUrl.startsWith('about:') || currentUrl.startsWith('blob:') 
-                    ? 'https://mps-bond-2027.web.app' 
-                    : currentUrl;
-            }
-            
-            updateQRCodeFromInput();
-            document.getElementById('modal-qrcode').classList.remove('hidden');
-        };
-
-        window.updateQRCodeFromInput = function() {
-            const targetUrl = document.getElementById('custom-qr-url').value.trim() || 'https://mps-bond-2027.web.app';
+            const currentUrl = window.location.href;
             const qrImg = document.getElementById('qr-code-img');
-            qrImg.src = `https://quickchart.io/qr?text=${encodeURIComponent(targetUrl)}&size=300&margin=1`;
-        };
-
-        window.copyFormLink = function() {
-            const urlInput = document.getElementById('custom-qr-url');
-            urlInput.select();
-            document.execCommand('copy');
-            showToast("Link copied to clipboard!");
+            const qrText = document.getElementById('qr-url-text');
+            
+            qrImg.src = `https://quickchart.io/qr?text=${encodeURIComponent(currentUrl)}&size=300&margin=1`;
+            qrText.textContent = currentUrl;
+            
+            document.getElementById('modal-qrcode').classList.remove('hidden');
         };
 
         window.closeQRCodeModal = function() {
@@ -706,7 +655,6 @@
             updateVoteCounter();
         };
 
-        // Export Data to CSV
         window.exportToCSV = function() {
             if (allResponses.length === 0) {
                 showToast("No response data available to export.");
@@ -742,7 +690,6 @@
             document.body.removeChild(link);
         };
 
-        // Helper sample data generator for demo purposes
         window.loadSampleData = function() {
             const sampleVoters = ["Sarah Jenkins", "Michael Miller", "David Ross", "Amanda Vance", "Chris Peterson", "Anonymous"];
             const commentsPool = [
@@ -754,8 +701,7 @@
                 "Fully support this project!"
             ];
 
-            const newSamples = [];
-            for (let i = 0; i < 15; i++) {
+            for (let i = 0; i < 5; i++) {
                 const voter = sampleVoters[Math.floor(Math.random() * sampleVoters.length)];
                 const votes = {};
                 const comments = {};
@@ -765,34 +711,35 @@
                     comments[p.id] = Math.random() > 0.6 ? commentsPool[Math.floor(Math.random() * commentsPool.length)] : '';
                 });
 
-                newSamples.push({
-                    id: 'sample_' + Date.now() + '_' + i,
+                const payload = {
                     voterName: voter,
                     date: new Date().toISOString().split('T')[0],
                     timestamp: Date.now() - (i * 3600000),
                     votes,
                     comments
-                });
-            }
+                };
 
-            allResponses = [...allResponses, ...newSamples];
-            if (!db) {
-                localStorage.setItem('mps_bond_votes', JSON.stringify(allResponses));
+                if (db) {
+                    push(ref(db, 'votes'), payload);
+                }
             }
-            updateDashboardUI();
-            showToast("Added 15 sample responses to the dashboard!");
+            showToast("Added 5 sample responses to Firebase!");
         };
 
-        window.clearAllData = function() {
-            allResponses = [];
-            if (!db) {
-                localStorage.removeItem('mps_bond_votes');
+        window.clearAllData = async function() {
+            if (db) {
+                try {
+                    await remove(ref(db, 'votes'));
+                } catch (e) {
+                    console.error("Error clearing database:", e);
+                }
             }
+            localStorage.removeItem('mps_bond_votes');
+            allResponses = [];
             updateDashboardUI();
             showToast("Dashboard data reset.");
         };
 
-        // Helper Utilities
         function showToast(msg) {
             const toast = document.getElementById('toast');
             document.getElementById('toast-msg').textContent = msg;
