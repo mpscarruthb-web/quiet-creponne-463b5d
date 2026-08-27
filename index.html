@@ -49,13 +49,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #9CA3AF;
         }
-        .animate-pulse-subtle {
-            animation: pulseSubtle 2s infinite ease-in-out;
-        }
-        @keyframes pulseSubtle {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.85; }
-        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-900 font-sans min-h-screen flex flex-col antialiased">
@@ -100,7 +93,6 @@
         <!-- VIEW 1: VOTING FORM -->
         <section id="view-form" class="space-y-6">
             <div class="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-32 h-32 bg-mustang-red/5 rounded-full -mr-10 -mt-10 pointer-events-none"></div>
                 <div class="max-w-3xl">
                     <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-red-50 text-mustang-red text-xs font-bold uppercase tracking-wider mb-3">
                         <i class="ph-bold ph-check-circle"></i>
@@ -119,7 +111,7 @@
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                             Voter Name <span class="text-mustang-red">*Required</span>
                         </label>
-                        <input type="text" id="voter-name" placeholder="Enter your full name" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-mustang-red focus:border-mustang-red text-sm outline-none transition" required>
+                        <input type="text" id="voter-name" placeholder="Enter your full name" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-mustang-red focus:border-mustang-red text-sm outline-none transition">
                     </div>
                     <div>
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -268,16 +260,15 @@
         </div>
     </div>
 
-    <!-- Toast -->
+    <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-sm font-medium transition-all transform translate-y-20 opacity-0 pointer-events-none">
         <i id="toast-icon" class="ph-bold ph-info text-lg text-mustang-red"></i>
         <span id="toast-msg">Notification message</span>
     </div>
 
-    <!-- Firebase Script and Application Engine -->
+    <!-- Firebase Direct Connection Engine -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const PROJECTS = [
@@ -294,8 +285,6 @@
         ];
 
         let db = null;
-        let auth = null;
-        let currentUser = null;
         let allResponses = [];
 
         const firebaseConfig = {
@@ -308,30 +297,14 @@
             databaseURL: "https://mps-bond-voting-default-rtdb.firebaseio.com"
         };
 
-        async function initBackend() {
+        function initBackend() {
             try {
                 const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
                 db = getDatabase(app);
-
-                await signInAnonymously(auth);
-
-                onAuthStateChanged(auth, (user) => {
-                    currentUser = user;
-                    if (user) {
-                        subscribeToData();
-                    }
-                });
+                subscribeToData();
             } catch (err) {
-                console.warn("Database fallback activated:", err);
-                setupLocalFallback();
+                console.warn("Database initialization failed:", err);
             }
-        }
-
-        function setupLocalFallback() {
-            const stored = localStorage.getItem('mps_bond_votes');
-            allResponses = stored ? JSON.parse(stored) : [];
-            updateDashboardUI();
         }
 
         function subscribeToData() {
